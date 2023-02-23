@@ -212,18 +212,33 @@ func (is Items) Swap(i int, j int) {
 	is[j] = swap
 }
 
+type Packer struct {
+	boxes []Box
+}
+
+func NewPacker(boxes []Box) *Packer {
+	if len(boxes) == 0 {
+		return &Packer{
+			boxes: BoxSamples,
+		}
+	}
+	return &Packer{
+		boxes: boxes,
+	}
+}
+
 // Original Algorithm: https://github.com/bom-d-van/binpacking/blob/master/erick_dube_507-034.pdf
 // The current implementation is based on it, but with some tweaks to fit our requirements.
 //
 // The original algorithm is designed for identical bins but our requirements is made for
 // bins in various sizes
-func Pack(notPacked []Item) (boxes []Box, err error) {
+func (p *Packer) Pack(notPacked []Item) (boxes []Box, err error) {
 	sort.Sort(Items(notPacked))
 	for len(notPacked) > 0 {
 		toPack := notPacked
 		// notPacked = []Item{} // clear notPacked
 
-		currentBin := pickBox(toPack[0])
+		currentBin := p.pickBox(toPack[0])
 		if !currentBin.IsValid() {
 			err = fmt.Errorf(
 				"item too big: {width: %d, height: %d, depth: %d, weight: %d}",
@@ -235,7 +250,7 @@ func Pack(notPacked []Item) (boxes []Box, err error) {
 			return
 		}
 
-		notPacked = pack(&currentBin, toPack, true)
+		notPacked = p.pack(&currentBin, toPack, true)
 
 		if len(currentBin.Items) > 0 {
 			boxes = append(boxes, currentBin)
@@ -245,11 +260,11 @@ func Pack(notPacked []Item) (boxes []Box, err error) {
 	return
 }
 
-func pack(currentBin *Box, toPack []Item, replaceBin bool) (notPacked []Item) {
+func (p *Packer) pack(currentBin *Box, toPack []Item, replaceBin bool) (notPacked []Item) {
 	if !currentBin.place(toPack[0], [3]int{}) {
-		if nbin := getBiggerBox(*currentBin); nbin.IsValid() {
+		if nbin := p.getBiggerBox(*currentBin); nbin.IsValid() {
 			*currentBin = nbin
-			return pack(currentBin, toPack, replaceBin)
+			return p.pack(currentBin, toPack, replaceBin)
 		}
 
 		return toPack
@@ -258,10 +273,10 @@ func pack(currentBin *Box, toPack []Item, replaceBin bool) (notPacked []Item) {
 	for _, currenItem := range toPack[1:] {
 		var fitted bool
 	lookup:
-		for p := 0; p < 3; p++ {
+		for po := 0; po < 3; po++ {
 			for _, binItem := range currentBin.Items {
 				var pos [3]int
-				switch p {
+				switch po {
 				case 0:
 					pos = [3]int{binItem.Pos[0] + binItem.GetWidth(), binItem.Pos[1], binItem.Pos[2]}
 				case 1:
@@ -278,8 +293,8 @@ func pack(currentBin *Box, toPack []Item, replaceBin bool) (notPacked []Item) {
 		}
 		if !fitted {
 			if replaceBin {
-				for nbin := getBiggerBox(*currentBin); nbin.IsValid(); nbin = getBiggerBox(nbin) {
-					left := pack(&nbin, append(currentBin.nonBoxItems(), currenItem), false)
+				for nbin := p.getBiggerBox(*currentBin); nbin.IsValid(); nbin = p.getBiggerBox(nbin) {
+					left := p.pack(&nbin, append(currentBin.nonBoxItems(), currenItem), false)
 					if len(left) == 0 {
 						*currentBin = nbin
 						fitted = true
@@ -322,8 +337,8 @@ func (b *Box) place(item Item, pos [3]int) (fit bool) {
 	return
 }
 
-func pickBox(item Item) Box {
-	for _, b := range BoxSamples {
+func (p *Packer) pickBox(item Item) Box {
+	for _, b := range p.boxes {
 		if !b.place(item, [3]int{}) {
 			continue
 		}
@@ -333,9 +348,9 @@ func pickBox(item Item) Box {
 	return Box{}
 }
 
-func getBiggerBox(box Box) Box {
+func (p *Packer) getBiggerBox(box Box) Box {
 	v := box.volume()
-	for _, b := range BoxSamples {
+	for _, b := range p.boxes {
 		if b.volume() > v {
 			return b
 		}
